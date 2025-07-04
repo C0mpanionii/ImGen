@@ -185,9 +185,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
             check=True
         )
         
-        # Create annotated tag
+        # Create annotated tag (unsigned to avoid GPG issues)
         subprocess.run(
-            ["git", "tag", "-a", tag_name, "-m", f"Release {version}"],
+            ["git", "tag", "-a", "--no-sign", tag_name, "-m", f"Release {version}"],
             check=True
         )
         
