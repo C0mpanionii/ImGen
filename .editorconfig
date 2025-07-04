@@ -1,0 +1,65 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+# Top-most EditorConfig file
+root = true
+
+# Unix-style newlines with a newline ending every file
+[*]
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+charset = utf-8
+
+# 4 space indentation
+[*.{py,java,c,cpp,h,hpp,cs,php,rb,scala,kt,kts,groovy,gradle}]
+indent_style = space
+indent_size = 4
+
+# 2 space indentation
+[*.{js,ts,jsx,tsx,json,yaml,yml,html,css,scss,sass,less,xml,svg,vue,svelte}]
+indent_style = space
+indent_size = 2
+
+# Tab indentation (for languages that prefer tabs)
+[*.{go,makefile,Makefile,*.mk}]
+indent_style = tab
+indent_size = 4
+
+# Markdown files
+[*.md]
+trim_trailing_whitespace = false
+
+# Batch files
+[*.{cmd,bat}]
+end_of_line = crlf
+
+# Configuration files
+[*.{ini,cfg,conf,toml}]
+indent_style = space
+indent_size = 2
+
+# Docker files
+[Dockerfile*]
+indent_style = space
+indent_size = 2
+
+# Shell scripts
+[*.{sh,bash,zsh,fish}]
+indent_style = space
+indent_size = 2
+
+# Python specific
+[*.py]
+max_line_length = 88
+
+# JavaScript/TypeScript specific
+[*.{js,ts,jsx,tsx}]
+max_line_length = 100
+
+# JSON files
+[*.json]
+max_line_length = 120
+
+# YAML files
+[*.{yml,yaml}]
+max_line_length = 120

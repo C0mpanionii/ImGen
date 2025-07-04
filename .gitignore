@@ -1,0 +1,79 @@
+# Large model files and caches
+*.bin
+*.safetensors
+*.ckpt
+*.pth
+*.pkl
+*.h5
+*.onnx
+models/
+huggingface_cache/
+__pycache__/
+*.pyc
+
+# Build artifacts
+*.exe
+*.lib
+*.exp
+*.dll
+*.so
+*.dylib
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Node modules (if any)
+node_modules/
+
+# Python virtual environments
+venv/
+env/
+.venv/
+
+# CUDA compilation artifacts
+*.ptx
+*.cubin
+
+# Large data directories
+data/
+datasets/
+outputs/
+generated/
+
+# Secrets and sensitive files
+secrets/
+*.key
+*.pem
+*.p12
+*.jks
+config/local.*
+
+# Documentation build artifacts
+site/
+_site/
+
+# Package manager files
+package-lock.json
+yarn.lock
+Pipfile.lock
