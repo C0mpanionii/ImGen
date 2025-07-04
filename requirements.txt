@@ -1,0 +1,33 @@
+# Core dependencies
+numpy>=1.21.0
+torch>=2.0.0
+torchvision>=0.15.0
+diffusers>=0.21.0
+transformers>=4.25.0
+accelerate>=0.20.0
+xformers>=0.0.20
+Pillow>=9.0.0
+opencv-python>=4.6.0
+requests>=2.28.0
+tqdm>=4.64.0
+huggingface-hub>=0.16.0
+
+# Web framework
+fastapi>=0.95.0
+uvicorn[standard]>=0.20.0
+pydantic>=1.10.0
+
+# Development and build tools
+build>=0.10.0
+wheel>=0.38.0
+setuptools>=65.0.0
+
+# Monitoring and logging
+prometheus-client>=0.16.0
+structlog>=22.3.0
+
+# Security
+cryptography>=39.0.0
+
+# Optional GPU acceleration (remove if not using CUDA)
+# torch-audio>=2.0.0  # Uncomment if needed

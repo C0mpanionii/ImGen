@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI/CD Pipeline with Release Workflow
 
 on:
   push:
@@ -6,10 +6,22 @@ on:
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type (patch, minor, major)'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+        - patch
+        - minor
+        - major
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  PYTHON_VERSION: '3.11'
 
 jobs:
   docs-quality:
@@ -231,16 +243,32 @@ jobs:
         run: |
           cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
 
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0.14.3
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@v0.15.8
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
           format: spdx-json
-          output-file: sbom.spdx.json
+          output-file: sbom-spdx.json
 
-      - name: Sign SBOM
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@v0.15.8
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
+          format: cyclonedx-json
+          output-file: sbom-cyclonedx.json
+
+      - name: Sign SBOMs
         run: |
-          cosign attest --yes --predicate sbom.spdx.json --type spdxjson ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
+          cosign attest --yes --predicate sbom-spdx.json --type spdxjson ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
+          cosign attest --yes --predicate sbom-cyclonedx.json --type cyclonedx ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
+
+      - name: Upload SBOMs as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-files
+          path: |
+            sbom-spdx.json
+            sbom-cyclonedx.json
 
   release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
@@ -254,36 +282,102 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3.1.1
 
-      - name: Create Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download SBOM artifacts
+        uses: actions/download-artifact@v4
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
+          name: sbom-files
+          path: ./sbom/
 
-      - name: Build artifacts
+      - name: Build documentation for release
+        run: |
+          pip install mkdocs-material mkdocs-git-revision-date-localized-plugin mkdocs-minify-plugin mkdocs-mermaid2-plugin
+          mkdocs build --clean --strict
+
+      - name: Create source archive
         run: |
           mkdir -p dist
-          # Add your build commands here
-          # Example: tar -czf dist/app-${{ github.ref_name }}.tar.gz .
+          # Create source snapshot
+          git archive --format=tar.gz --prefix=image-generation-workspace-${{ github.ref_name }}/ HEAD > dist/image-generation-workspace-${{ github.ref_name }}-source.tar.gz
+          
+          # Package documentation
+          tar -czf dist/image-generation-workspace-${{ github.ref_name }}-docs.tar.gz site/
+          
+          # Create comprehensive release bundle
+          mkdir -p release-bundle
+          cp -r site/ release-bundle/docs/
+          cp -r sbom/ release-bundle/
+          cp README.md release-bundle/
+          cp CONTRIBUTING.md release-bundle/
+          cp -r styleguides/ release-bundle/
+          
+          # Add version info
+          echo "Version: ${{ github.ref_name }}" > release-bundle/VERSION
+          echo "Build Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> release-bundle/VERSION
+          echo "Git Commit: ${{ github.sha }}" >> release-bundle/VERSION
+          echo "Docker Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}" >> release-bundle/VERSION
+          
+          # Create self-contained bundle
+          tar -czf dist/image-generation-workspace-${{ github.ref_name }}-complete.tar.gz release-bundle/
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum *.tar.gz > checksums.sha256
+          sha512sum *.tar.gz > checksums.sha512
 
       - name: Sign artifacts
         run: |
-          for file in dist/*; do
+          cd dist
+          for file in *.tar.gz checksums.*; do
             cosign sign-blob --yes --output-signature="${file}.sig" "$file"
           done
 
-      - name: Upload artifacts
+      - name: Extract release notes
+        id: release_notes
+        run: |
+          if [ -f CHANGELOG.md ]; then
+            # Extract release notes for this version from CHANGELOG.md
+            awk '/^## \[${{ github.ref_name }}\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md > release_notes.md
+          else
+            echo "Release ${{ github.ref_name }}" > release_notes.md
+            echo "" >> release_notes.md
+            echo "This release includes:" >> release_notes.md
+            echo "- Docker images available at ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}" >> release_notes.md
+            echo "- SBOM files for transparency and security analysis" >> release_notes.md
+            echo "- Complete documentation bundle" >> release_notes.md
+            echo "- Self-contained source snapshot" >> release_notes.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ github.ref_name }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist/*.tar.gz
+            dist/*.sig
+            dist/checksums.*
+            sbom/*.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-artifacts
+          name: release-artifacts-${{ github.ref_name }}
           path: |
             dist/
-            dist/*.sig
+            sbom/

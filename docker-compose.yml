@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ENVIRONMENT=production
+    volumes:
+      - ./models:/app/models:ro
+      - ./outputs:/app/outputs
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  docs:
+    build:
+      context: .
+      dockerfile: docs/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./docs:/docs:ro
+    environment:
+      - MKDOCS_STRICT=true
+    command: mkdocs serve --dev-addr=0.0.0.0:8000
+    depends_on:
+      - app
+
+networks:
+  default:
+    name: image-generation-workspace
