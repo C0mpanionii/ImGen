@@ -1,0 +1,43 @@
+# Markdownlint configuration
+# See: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+# Enable all rules by default
+default: true
+
+# Disable specific rules that are often impractical for documentation
+MD013: false  # Line length - often impractical for documentation with long URLs
+MD033: false  # HTML tags - sometimes necessary in docs for formatting
+MD041: false  # First line in file should be a top level heading - not always applicable
+MD029: false  # Ordered list item prefix - allow both 1. and 1) styles
+MD036: false  # Emphasis used instead of a heading - sometimes emphasis is intentional
+MD024: false  # Multiple headings with the same content - common in API docs
+MD034: false  # Bare URL used - sometimes intentional for readability
+
+# Configure specific rules
+MD003:
+  # Header style - consistent with project preference
+  style: "atx"
+
+MD007:
+  # Unordered list indentation - standard 2 spaces
+  indent: 2
+
+MD012:
+  # Multiple consecutive blank lines - allow up to 2
+  maximum: 2
+
+MD026:
+  # Trailing punctuation in heading - allow certain punctuation
+  punctuation: ".,;:!?"
+
+MD035:
+  # Horizontal rule style - enforce consistent style
+  style: "---"
+
+MD046:
+  # Code block style - prefer fenced code blocks
+  style: "fenced"
+
+MD048:
+  # Code fence style - prefer backticks
+  style: "backtick"

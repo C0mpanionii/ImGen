@@ -1,0 +1,9 @@
+[codespell]
+skip = .git,*.png,*.jpg,*.jpeg,*.svg,*.ico,*.woff,*.woff2,*.eot,*.ttf,*.otf,*.pdf,*.zip,*.tar.gz,*.tar.bz2,*.7z,*.rar,node_modules,dist,build,*.lock,*.log,*.min.js,*.min.css
+ignore-words-list = ans,ba,convertor,datas,fo,hist,nd,te,wan
+check-filenames = true
+check-hidden = true
+
+# Add any additional custom words or phrases to ignore here
+# For example:
+# include this@example.com

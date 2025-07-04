@@ -1,0 +1,289 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  docs-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install documentation quality tools
+        run: |
+          # Install lychee (link checker)
+          curl -fsSL https://github.com/lycheeverse/lychee/releases/download/v0.13.0/lychee-v0.13.0-x86_64-unknown-linux-gnu.tar.gz | tar -xzC /tmp
+          sudo mv /tmp/lychee /usr/local/bin/
+          
+          # Install markdownlint-cli
+          npm install -g markdownlint-cli
+          
+          # Install codespell
+          pip install codespell
+
+      - name: Run link checker
+        run: |
+          # Create lychee config if it doesn't exist
+          if [ ! -f ".lycheeignore" ]; then
+            cat > .lycheeignore << 'EOF'
+          # Ignore local/placeholder links
+          http://localhost*
+          https://localhost*
+          http://127.0.0.1*
+          https://127.0.0.1*
+          # Common false positives
+          mailto:*
+          # GitHub internal links that may not be accessible during CI
+          *github.com/*/settings/*
+          *github.com/*/actions/*
+          EOF
+          fi
+          
+          # Run lychee on all markdown files
+          lychee --config .lycheeignore --verbose --no-progress --max-concurrency 4 .
+          
+      - name: Run markdown linter
+        run: |
+          # Create markdownlint config if it doesn't exist
+          if [ ! -f ".markdownlint.yml" ]; then
+            cat > .markdownlint.yml << 'EOF'
+          # Markdownlint configuration
+          default: true
+          MD013: false  # Line length - often impractical for documentation
+          MD033: false  # HTML tags - sometimes necessary in docs
+          MD041: false  # First line in file should be a top level heading
+          MD029: false  # Ordered list item prefix - allow both 1. and 1)
+          MD036: false  # Emphasis used instead of a heading
+          EOF
+          fi
+          
+          # Run markdownlint on all markdown files
+          markdownlint "**/*.md" --config .markdownlint.yml
+          
+      - name: Run spell checker
+        run: |
+          # Create codespell config if it doesn't exist
+          if [ ! -f ".codespellrc" ]; then
+            cat > .codespellrc << 'EOF'
+          [codespell]
+          skip = .git,*.png,*.jpg,*.jpeg,*.svg,*.ico,*.woff,*.woff2,*.eot,*.ttf,*.otf,*.pdf,*.zip,*.tar.gz,*.tar.bz2,*.7z,*.rar,node_modules,dist,build,*.lock,*.log,*.min.js,*.min.css
+          ignore-words-list = ans,ba,convertor,datas,fo,hist,nd,te,wan
+          check-filenames = true
+          check-hidden = true
+          EOF
+          fi
+          
+          # Run codespell on all files
+          codespell --config .codespellrc
+
+  lint-and-test:
+    runs-on: ubuntu-latest
+    needs: docs-quality
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pre-commit
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          if [ -f package.json ]; then npm ci; fi
+
+      - name: Run pre-commit hooks
+        run: |
+          pre-commit install
+          pre-commit run --all-files
+
+      - name: Run tests
+        run: |
+          if [ -f pytest.ini ] || [ -f setup.cfg ] || [ -f pyproject.toml ]; then
+            pytest --cov=. --cov-report=xml
+          elif [ -f package.json ]; then
+            npm test
+          fi
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  security-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          publishToken: ${{ secrets.SEMGREP_APP_TOKEN }}
+          publishDeployment: true
+          generateSarif: "1"
+
+      - name: Upload Semgrep results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: semgrep.sarif
+        if: always()
+
+  build-and-push:
+    needs: [docs-quality, lint-and-test, security-scan]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.1.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Sign container image
+        run: |
+          cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0.14.3
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Sign SBOM
+        run: |
+          cosign attest --yes --predicate sbom.spdx.json --type spdxjson ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: [build-and-push]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.1.1
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: Build artifacts
+        run: |
+          mkdir -p dist
+          # Add your build commands here
+          # Example: tar -czf dist/app-${{ github.ref_name }}.tar.gz .
+
+      - name: Sign artifacts
+        run: |
+          for file in dist/*; do
+            cosign sign-blob --yes --output-signature="${file}.sig" "$file"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            dist/
+            dist/*.sig

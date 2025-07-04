@@ -1,0 +1,32 @@
+# Lychee configuration file - URLs to ignore during link checking
+
+# Ignore local/placeholder links
+http://localhost*
+https://localhost*
+http://127.0.0.1*
+https://127.0.0.1*
+
+# Common false positives
+mailto:*
+
+# GitHub internal links that may not be accessible during CI
+*github.com/*/settings/*
+*github.com/*/actions/*
+
+# Ignore example/placeholder URLs
+http://example.com*
+https://example.com*
+http://www.example.com*
+https://www.example.com*
+
+# Ignore local file references
+file://*
+
+# Ignore anchors that may not be resolvable
+#*anchor*
+
+# Ignore specific domains known to have issues with automated checks
+*linkedin.com/in/*
+*facebook.com/*
+*twitter.com/*
+*instagram.com/*
