@@ -11,6 +11,15 @@ C:\Program Files\Docker\Docker\resources\bin\docker-compose.exe
 
 The Docker Desktop installer automatically adds this directory to the system PATH, so existing scripts continue to work without modification. All commands in this guide use the standard `docker compose` or `docker-compose` commands that rely on PATH resolution.
 
+### Verified Working Locations
+- ✅ Main project: `docker-compose.yml` 
+- ✅ LibreChat project: `LibreChat/docker-compose.yml`
+- ✅ CI/CD workflows: `.github/workflows/ci-cd.yml` (uses Docker actions)
+- ✅ Azure DevOps: `azure-pipelines.yml` (uses Docker tasks)
+
+### Impact on Automation Scripts
+All existing automation scripts continue to work without modification since Docker Desktop properly manages the PATH environment variable.
+
 ## Prerequisites
 
 1. **Docker & Docker Compose**: Install Docker Desktop with Docker Compose
