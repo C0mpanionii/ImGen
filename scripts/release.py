@@ -150,7 +150,7 @@ class ReleaseManager:
         entry = self.generate_changelog_entry(version, commits)
         
         if self.changelog_path.exists():
-            content = self.changelog_path.read_text()
+            content = self.changelog_path.read_text(encoding='utf-8')
             # Insert after the header
             lines = content.split("\n")
             header_end = 0
@@ -171,7 +171,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 {entry}"""
         
-        self.changelog_path.write_text(new_content)
+        self.changelog_path.write_text(new_content, encoding='utf-8')
         print(f"✅ Updated changelog with version {version}")
     
     def create_git_tag(self, version: str) -> None:
